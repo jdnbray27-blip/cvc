@@ -22,6 +22,16 @@
 
   .pic { font-size:min(28vw, 150px); line-height:1; margin-top:6px; }
 
+  .speaker {
+    width:min(28vw,150px); height:min(28vw,150px); margin-top:6px;
+    border:none; border-radius:50%; background:#fff; box-shadow:0 3px 0 #cfe0d8;
+    font-size:min(14vw,70px); display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .speaker:active { transform:translateY(2px); box-shadow:none; }
+  .speaker.bump { animation:bump .3s ease; }
+  @keyframes bump { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+
   .boxes { display:flex; gap:14px; margin:10px 0 18px; }
   .box {
     width:min(18vw,78px); height:min(18vw,78px); border-radius:16px;
@@ -75,6 +85,7 @@
 <div class="misscount" id="missCount">tries: 0</div>
 
 <div class="pic" id="pic">&#128008;</div>
+<button class="speaker" id="speaker" style="display:none">&#128266;</button>
 <div class="boxes" id="boxes"></div>
 <div class="tray" id="tray"></div>
 
@@ -87,6 +98,12 @@
   <div class="box2">
     <h3>Grown-up settings</h3>
     <div class="row"><input type="checkbox" id="audioOn" checked> <span>Say the word when she finishes</span></div>
+    <div class="row" style="flex-direction:column; align-items:flex-start; gap:6px;">
+      <span>Word mode:</span>
+      <label><input type="radio" name="mode" id="modePic" value="pic" checked> Show a picture</label>
+      <label><input type="radio" name="mode" id="modeHear" value="hear"> Just say the word</label>
+      <label><input type="radio" name="mode" id="modeMix" value="mix"> Mix it up</label>
+    </div>
     <div class="row"><span>Total wrong taps this session:</span> <b id="sessionMiss">0</b></div>
     <button id="closePanel">Close</button>
   </div>
@@ -104,11 +121,36 @@ const WORDS = [
   { w:'egg', e:'\u{1F95A}' }, { w:'fox', e:'\u{1F98A}' }, { w:'dog', e:'\u{1F436}' },
   { w:'pig', e:'\u{1F437}' }, { w:'bug', e:'\u{1F41B}' }, { w:'net', e:'\u{1F945}' },
   { w:'log', e:'\u{1FAB5}' }, { w:'gem', e:'\u{1F48E}' }, { w:'pen', e:'\u{1F58A}\uFE0F' },
-  { w:'cow', e:'\u{1F42E}' }, { w:'web', e:'\u{1F578}\uFE0F' },
-  // -- bonus: not strict CVC (vowel-first or double-vowel), but still work with the
-  //    same single-vowel-distractor tile logic below, so included for now --
-  { w:'owl', e:'\u{1F989}' }, { w:'bee', e:'\u{1F41D}' }, { w:'eye', e:'\u{1F441}\uFE0F' },
-  { w:'ant', e:'\u{1F41C}' }, { w:'key', e:'\u{1F511}' }, { w:'pie', e:'\u{1F967}' }
+  { w:'web', e:'\u{1F578}\uFE0F' },
+  // -- bonus: not strict CVC/decodable (vowel team, diphthong, or silent letters) --
+  //    kept for picture mode's sight-word matching, but excluded from "hear it"
+  //    mode (d:false) since sounding them out letter-by-letter doesn't work --
+  { w:'cow', e:'\u{1F42E}', d:false }, { w:'owl', e:'\u{1F989}', d:false },
+  { w:'bee', e:'\u{1F41D}', d:false }, { w:'eye', e:'\u{1F441}\uFE0F', d:false },
+  { w:'ant', e:'\u{1F41C}' }, { w:'key', e:'\u{1F511}', d:false }, { w:'pie', e:'\u{1F967}', d:false },
+
+  // -- expansion: more clean, fully decodable short-vowel CVC words (one letter,
+  //    one sound each, no digraphs/blends/silent letters) --
+  // short A
+  { w:'cap', e:'\u{1F9E2}' }, { w:'nap', e:'\u{1F634}' }, { w:'pan', e:'\u{1F373}' },
+  { w:'bad', e:'\u{1F44E}' }, { w:'sad', e:'\u{1F622}' }, { w:'mad', e:'\u{1F620}' },
+  { w:'tag', e:'\u{1F3F7}\uFE0F' }, { w:'yam', e:'\u{1F360}' }, { w:'cab', e:'\u{1F695}' },
+  // short E
+  { w:'hen', e:'\u{1F414}' }, { w:'jet', e:'\u{2708}\uFE0F' }, { w:'ten', e:'\u{1F51F}' },
+  { w:'wet', e:'\u{1F4A7}' }, { w:'red', e:'\u{1F534}' }, { w:'leg', e:'\u{1F9B5}' },
+  // short I
+  { w:'bin', e:'\u{1F5D1}\uFE0F' }, { w:'zip', e:'\u{1F910}' }, { w:'kid', e:'\u{1F9D2}' },
+  { w:'lip', e:'\u{1F444}' }, { w:'pin', e:'\u{1F4CC}' }, { w:'win', e:'\u{1F3C6}' },
+  { w:'six', e:'6\uFE0F\u20E3' }, { w:'rib', e:'\u{1F356}' }, { w:'kit', e:'\u{1F9F0}' },
+  // short O
+  { w:'box', e:'\u{1F4E6}' }, { w:'hot', e:'\u{1F525}' }, { w:'pot', e:'\u{1F372}' },
+  { w:'job', e:'\u{1F4BC}' }, { w:'fog', e:'\u{1F32B}\uFE0F' }, { w:'hog', e:'\u{1F417}' },
+  { w:'sob', e:'\u{1F62D}' }, { w:'rod', e:'\u{1F3A3}' }, { w:'dot', e:'\u{26AB}' },
+  // short U
+  { w:'cup', e:'\u{1F964}' }, { w:'hug', e:'\u{1F917}' }, { w:'hut', e:'\u{1F6D6}' },
+  { w:'mug', e:'\u{2615}' }, { w:'nut', e:'\u{1F95C}' }, { w:'sub', e:'\u{1F96A}' },
+  { w:'tub', e:'\u{1F6C1}' }, { w:'run', e:'\u{1F3C3}' }, { w:'fun', e:'\u{1F389}' },
+  { w:'jug', e:'\u{1F3FA}' }
 ];
 const VOWEL_NEIGHBOURS = { a:['o','e'], e:['i','a'], i:['e','a'], o:['a','u'], u:['o','a'] };
 const CONSONANTS = 'bdfgjklmnpqrstvwxyz'.split('');
@@ -116,22 +158,32 @@ const CONSONANTS = 'bdfgjklmnpqrstvwxyz'.split('');
 let miss = {};         // word -> total wrong taps (session, invisible to child)
 let sessionMiss = 0;
 let audioOn = true;
+let mode = localStorage.getItem('cvcMode') || 'pic';   // 'pic' | 'hear' | 'mix'
+let curMode = 'pic';   // resolved mode for the current word (mix picks one each time)
 let cur = null;        // current word object
 let curTiles = [];     // {letter, used}
 let filled = [];       // letters placed so far
 
 const $ = id => document.getElementById(id);
 
-function say(t) {
-  if (!audioOn || !window.speechSynthesis) return;
+function speak(t) {
+  if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(t);
   u.rate = 0.9; u.pitch = 1.1;
   speechSynthesis.speak(u);
 }
+function say(t) {
+  if (!audioOn) return;
+  speak(t);
+}
 
-function pickWord() {
-  const pool = WORDS.filter(x => x.w !== (cur && cur.w));
+function pickWord(hearOnly) {
+  let pool = WORDS.filter(x => x.w !== (cur && cur.w));
+  // "hear it" mode needs words that are decodable sound-by-sound (one letter,
+  // one sound) — words like "cow" or "pie" rely on a vowel team/diphthong
+  // that can't be sounded out letter-by-letter from hearing alone.
+  if (hearOnly) pool = pool.filter(x => x.d !== false);
   const weighted = [];
   pool.forEach(x => {
     const m = miss[x.w] || 0;
@@ -169,11 +221,13 @@ function buildTiles(word) {
 }
 
 function startWord() {
-  cur = pickWord();
+  curMode = mode === 'mix' ? (Math.random() < 0.5 ? 'pic' : 'hear') : mode;
+  cur = pickWord(curMode === 'hear');
   curTiles = buildTiles(cur);
   filled = [];
   $('hooray').classList.remove('on');
   render();
+  if (curMode === 'hear') speak(cur.w);
 }
 
 function tapTile(idx) {
@@ -208,7 +262,14 @@ function wiggle(idx) {
 }
 
 function render() {
-  $('pic').textContent = cur.e;
+  if (curMode === 'hear') {
+    $('pic').style.display = 'none';
+    $('speaker').style.display = 'flex';
+  } else {
+    $('pic').style.display = '';
+    $('speaker').style.display = 'none';
+    $('pic').textContent = cur.e;
+  }
 
   const bx = $('boxes'); bx.innerHTML = '';
   for (let i = 0; i < cur.w.length; i++) {
@@ -234,6 +295,20 @@ $('gear').onclick = () => $('panel').classList.add('on');
 $('closePanel').onclick = () => $('panel').classList.remove('on');
 $('panel').onclick = e => { if (e.target === $('panel')) $('panel').classList.remove('on'); };
 $('audioOn').onchange = e => audioOn = e.target.checked;
+$('speaker').onclick = () => {
+  speak(cur.w);
+  $('speaker').classList.remove('bump');
+  void $('speaker').offsetWidth;
+  $('speaker').classList.add('bump');
+};
+document.querySelectorAll('input[name="mode"]').forEach(r => {
+  r.checked = (r.value === mode);
+  r.onchange = () => {
+    mode = r.value;
+    localStorage.setItem('cvcMode', mode);
+    startWord();
+  };
+});
 
 startWord();
 </script>
