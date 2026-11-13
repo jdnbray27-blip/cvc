@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Word Builder</title>
+<style>
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; height:100%; }
+  body {
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background:#eef6f2; color:#2e3b36;
+    display:flex; flex-direction:column; align-items:center;
+    padding:14px 14px 10px; overflow:hidden; user-select:none;
+  }
+
+  .misscount {
+    position:fixed; top:8px; right:10px; font-size:12px; color:#9fb0a9;
+    background:#fff; border-radius:8px; padding:3px 8px; box-shadow:0 1px 0 #d8e6e0;
+  }
+
+  .pic { font-size:min(28vw, 150px); line-height:1; margin-top:6px; }
+
+  .boxes { display:flex; gap:14px; margin:10px 0 18px; }
+  .box {
+    width:min(18vw,78px); height:min(18vw,78px); border-radius:16px;
+    background:#fff; border:3px dashed #cfe0d8;
+    display:flex; align-items:center; justify-content:center;
+    font-size:min(9vw,40px); font-weight:800; color:#2e7d5a;
+  }
+  .box.filled { border-style:solid; border-color:#8fd4ac; background:#eafff2; animation:drop .22s ease-out; }
+  @keyframes drop { from{transform:translateY(-14px) scale(.7);opacity:0} to{transform:none;opacity:1} }
+
+  .tray { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:560px; margin-top:4px; }
+  .tile {
+    width:min(15vw,66px); height:min(15vw,66px); border-radius:14px; border:none;
+    background:#fff; box-shadow:0 2px 0 #cfe0d8; font-size:min(8vw,32px); font-weight:800;
+    color:#2e3b36; cursor:pointer;
+  }
+  .tile:active { transform:translateY(2px); box-shadow:none; }
+  .tile.used { visibility:hidden; }
+  .tile.wrong { animation:wiggle .32s ease; }
+  @keyframes wiggle {
+    0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(7px)}
+    60%{transform:translateX(-5px)} 80%{transform:translateX(3px)}
+  }
+
+  .hooray {
+    margin-top:18px; text-align:center; display:none;
+  }
+  .hooray.on { display:block; animation:pop .25s ease-out; }
+  @keyframes pop { from{transform:scale(.6);opacity:0} to{transform:scale(1);opacity:1} }
+  .hooray .txt { font-size:30px; font-weight:800; color:#2e7d5a; }
+  .nextbtn {
+    margin-top:12px; border:none; border-radius:16px; padding:14px 28px; font-size:19px; font-weight:800;
+    background:#3fae77; color:#fff; box-shadow:0 2px 0 #2d8259; cursor:pointer;
+  }
+  .nextbtn:active { transform:translateY(2px); box-shadow:none; }
+
+  .gear { position:fixed; top:8px; left:10px; width:36px; height:36px; border-radius:50%; border:none;
+          background:#fff; box-shadow:0 1px 0 #d8e6e0; font-size:17px; cursor:pointer; }
+  .panel { position:fixed; inset:0; background:rgba(40,50,45,.5); display:none; align-items:center; justify-content:center; z-index:9; }
+  .panel.on { display:flex; }
+  .panel .box2 { background:#fff; border-radius:18px; padding:20px; width:min(90vw,380px); }
+  .panel h3 { margin:0 0 10px; font-size:17px; }
+  .panel .row { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:14px; }
+  .panel button { margin-top:16px; width:100%; border:none; border-radius:12px; padding:11px; font-size:15px;
+    font-weight:700; background:#3fae77; color:#fff; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<button class="gear" id="gear">&#9881;</button>
+<div class="misscount" id="missCount">tries: 0</div>
+
+<div class="pic" id="pic">&#128008;</div>
+<div class="boxes" id="boxes"></div>
+<div class="tray" id="tray"></div>
+
+<div class="hooray" id="hooray">
+  <div class="txt">&#127881; Hooray!</div>
+  <button class="nextbtn" id="nextBtn">Next word</button>
+</div>
+
+<div class="panel" id="panel">
+  <div class="box2">
+    <h3>Grown-up settings</h3>
+    <div class="row"><input type="checkbox" id="audioOn" checked> <span>Say the word when she finishes</span></div>
+    <div class="row"><span>Total wrong taps this session:</span> <b id="sessionMiss">0</b></div>
+    <button id="closePanel">Close</button>
+  </div>
+</div>
+
+<script>
+/* ---- word bank: Short A, curated for clean single-emoji matches ---- */
+const WORDS = [
+  // -- CVC: short A --
+  { w:'cat', e:'\u{1F408}' }, { w:'hat', e:'\u{1F3A9}' }, { w:'bat', e:'\u{1F987}' },
+  { w:'map', e:'\u{1F5FA}\uFE0F' }, { w:'can', e:'\u{1F96B}' }, { w:'bag', e:'\u{1F45C}' },
+  { w:'van', e:'\u{1F690}' }, { w:'fan', e:'\u{1FAAD}' }, { w:'rat', e:'\u{1F400}' },
+  // -- CVC/near-CVC: other vowels, all verified against unicodedata.name() --
+  { w:'sun', e:'\u{2600}\uFE0F' }, { w:'bus', e:'\u{1F68C}' }, { w:'bed', e:'\u{1F6CF}\uFE0F' },
+  { w:'egg', e:'\u{1F95A}' }, { w:'fox', e:'\u{1F98A}' }, { w:'dog', e:'\u{1F436}' },
+  { w:'pig', e:'\u{1F437}' }, { w:'bug', e:'\u{1F41B}' }, { w:'net', e:'\u{1F945}' },
+  { w:'log', e:'\u{1FAB5}' }, { w:'gem', e:'\u{1F48E}' }, { w:'pen', e:'\u{1F58A}\uFE0F' },
+  { w:'cow', e:'\u{1F42E}' }, { w:'web', e:'\u{1F578}\uFE0F' },
+  // -- bonus: not strict CVC (vowel-first or double-vowel), but still work with the
+  //    same single-vowel-distractor tile logic below, so included for now --
+  { w:'owl', e:'\u{1F989}' }, { w:'bee', e:'\u{1F41D}' }, { w:'eye', e:'\u{1F441}\uFE0F' },
+  { w:'ant', e:'\u{1F41C}' }, { w:'key', e:'\u{1F511}' }, { w:'pie', e:'\u{1F967}' }
+];
+const VOWEL_NEIGHBOURS = { a:['o','e'], e:['i','a'], i:['e','a'], o:['a','u'], u:['o','a'] };
+const CONSONANTS = 'bdfgjklmnpqrstvwxyz'.split('');
+
+let miss = {};         // word -> total wrong taps (session, invisible to child)
+let sessionMiss = 0;
+let audioOn = true;
+let cur = null;        // current word object
+let curTiles = [];     // {letter, used}
+let filled = [];       // letters placed so far
+
+const $ = id => document.getElementById(id);
+
+function say(t) {
+  if (!audioOn || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t);
+  u.rate = 0.9; u.pitch = 1.1;
+  speechSynthesis.speak(u);
+}
+
+function pickWord() {
+  const pool = WORDS.filter(x => x.w !== (cur && cur.w));
+  const weighted = [];
+  pool.forEach(x => {
+    const m = miss[x.w] || 0;
+    const weight = 1 + m * 2;
+    for (let i = 0; i < weight; i++) weighted.push(x);
+  });
+  return weighted[Math.floor(Math.random() * weighted.length)];
+}
+
+function buildTiles(word) {
+  const letters = word.w.split('');
+  const vowel = letters.find(l => 'aeiou'.includes(l));
+  const fallbackNeighbours = VOWEL_NEIGHBOURS[vowel] || ['e'];
+  // avoid picking a distractor letter that's already a real letter in this word
+  // (e.g. 'pie' already contains 'e', so skip 'e' as the i-distractor)
+  const neighbourPool = fallbackNeighbours.filter(c => !letters.includes(c));
+  const safePool = neighbourPool.length ? neighbourPool : fallbackNeighbours;
+  const vowelDistractor = safePool[Math.floor(Math.random()*safePool.length)];
+
+  const fillerPool = CONSONANTS.filter(c => !letters.includes(c));
+  const fillers = [];
+  while (fillers.length < 2) {
+    const c = fillerPool[Math.floor(Math.random()*fillerPool.length)];
+    if (!fillers.includes(c)) fillers.push(c);
+  }
+
+  const tiles = [...letters, vowelDistractor, ...fillers]
+    .map(l => ({ letter: l, used: false }));
+  // shuffle
+  for (let i = tiles.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+  }
+  return tiles;
+}
+
+function startWord() {
+  cur = pickWord();
+  curTiles = buildTiles(cur);
+  filled = [];
+  $('hooray').classList.remove('on');
+  render();
+}
+
+function tapTile(idx) {
+  const tile = curTiles[idx];
+  if (tile.used) return;
+  const needed = cur.w[filled.length];
+  if (tile.letter === needed) {
+    tile.used = true;
+    filled.push(tile.letter);
+    render();
+    if (filled.length === cur.w.length) {
+      setTimeout(() => {
+        $('hooray').classList.add('on');
+        say(cur.w);
+      }, 150);
+    }
+  } else {
+    miss[cur.w] = (miss[cur.w]||0) + 1;
+    sessionMiss++;
+    $('missCount').textContent = 'tries: ' + sessionMiss;
+    $('sessionMiss').textContent = sessionMiss;
+    wiggle(idx);
+  }
+}
+
+function wiggle(idx) {
+  const el = document.querySelector(`.tile[data-i="${idx}"]`);
+  if (!el) return;
+  el.classList.remove('wrong');
+  void el.offsetWidth;
+  el.classList.add('wrong');
+}
+
+function render() {
+  $('pic').textContent = cur.e;
+
+  const bx = $('boxes'); bx.innerHTML = '';
+  for (let i = 0; i < cur.w.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'box' + (i < filled.length ? ' filled' : '');
+    d.textContent = i < filled.length ? filled[i] : '';
+    bx.appendChild(d);
+  }
+
+  const tr = $('tray'); tr.innerHTML = '';
+  curTiles.forEach((t, i) => {
+    const b = document.createElement('button');
+    b.className = 'tile' + (t.used ? ' used' : '');
+    b.textContent = t.letter;
+    b.dataset.i = i;
+    b.onclick = () => tapTile(i);
+    tr.appendChild(b);
+  });
+}
+
+$('nextBtn').onclick = startWord;
+$('gear').onclick = () => $('panel').classList.add('on');
+$('closePanel').onclick = () => $('panel').classList.remove('on');
+$('panel').onclick = e => { if (e.target === $('panel')) $('panel').classList.remove('on'); };
+$('audioOn').onchange = e => audioOn = e.target.checked;
+
+startWord();
+</script>
+</body>
+</html>
